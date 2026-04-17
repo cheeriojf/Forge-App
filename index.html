@@ -138,6 +138,12 @@ body{font-family:'Barlow',sans-serif;background:#000;display:flex;justify-conten
 .cs-wrap h2{font-family:'Barlow Condensed',sans-serif;font-size:26px;color:var(--text2)}
 .cs-wrap p{font-size:14px;color:var(--text3);margin-top:6px}
 
+/* CHARTS */
+.chart-section{background:var(--bg3);border-radius:12px;padding:16px;margin-bottom:16px;border:1px solid var(--border)}
+.chart-section h4{font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text3);margin-bottom:14px}
+.chart-wrap{position:relative;height:200px}
+.chart-wrap-sm{position:relative;height:170px}
+
 /* TRAINING MODULES */
 .level-header{font-family:'Barlow Condensed',sans-serif;font-size:16px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--text2);margin:22px 0 10px;padding:0 2px;border-left:3px solid var(--accent);padding-left:10px}
 .level-header:first-child{margin-top:0}
@@ -150,6 +156,29 @@ body{font-family:'Barlow',sans-serif;background:#000;display:flex;justify-conten
 .video-level{font-size:11px;color:var(--text3);margin-top:3px}
 .video-arrow{color:var(--text3);font-size:16px;flex-shrink:0}
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyBI3EE638KidKbw4iTk8DOJMCYBSJQoJIE",
+  authDomain: "forge-performance-13603.firebaseapp.com",
+  projectId: "forge-performance-13603",
+  storageBucket: "forge-performance-13603.firebasestorage.app",
+  messagingSenderId: "365187947179",
+  appId: "1:365187947179:web:00709d6c712eb6a97af5ee"
+};
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+window._firebaseAuth = auth;
+window._firebaseFns = { signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail, signOut };
+
+onAuthStateChanged(auth, user => {
+  if (user) window._firebaseUser = user;
+});
+</script>
 </head>
 <body>
 <div id="app">
@@ -169,14 +198,31 @@ body{font-family:'Barlow',sans-serif;background:#000;display:flex;justify-conten
     <h1>FORGE</h1>
     <p>Performance Analytics</p>
   </div>
-  <div style="width:100%">
-    <div class="field"><label>Username</label><input type="text" id="u-in" placeholder="Enter username" autocomplete="username"/></div>
-    <div class="field"><label>Password</label><input type="password" id="p-in" placeholder="Enter password" autocomplete="current-password"/></div>
-    <button class="btn-primary" onclick="doLogin()">Sign In</button>
-    <div class="login-error" id="login-err"></div>
-    <div class="divider"><em>login info</em></div>
-    <div class="demo-box">
-      Use the username and password<br>provided by your coach.
+  <div style="width:100%" id="login-form">
+    <!-- Step 1: Email -->
+    <div id="step-email">
+      <div class="field"><label>Email Address</label><input type="email" id="email-in" placeholder="Enter your email" autocomplete="email"/></div>
+      <button class="btn-primary" onclick="checkEmail()">Continue</button>
+      <div class="login-error" id="login-err"></div>
+    </div>
+    <!-- Step 2: Password (existing user) -->
+    <div id="step-password" style="display:none">
+      <div class="field" style="margin-bottom:6px"><label>Email</label><input type="email" id="email-display" disabled style="opacity:0.5"/></div>
+      <button style="background:none;border:none;color:var(--accent);font-size:12px;cursor:pointer;margin-bottom:14px;padding:0" onclick="backToEmail()">← Change email</button>
+      <div class="field"><label>Password</label><input type="password" id="p-in" placeholder="Enter your password" autocomplete="current-password"/></div>
+      <button class="btn-primary" onclick="doLogin()">Sign In</button>
+      <button style="width:100%;background:none;border:none;color:var(--text2);font-size:13px;cursor:pointer;margin-top:12px;padding:8px" onclick="sendPasswordReset()">Forgot password?</button>
+      <div class="login-error" id="login-err2"></div>
+    </div>
+    <!-- Step 3: Set password (new user) -->
+    <div id="step-setpassword" style="display:none">
+      <div style="background:rgba(26,110,245,0.1);border:1px solid rgba(26,110,245,0.3);border-radius:10px;padding:14px;margin-bottom:16px">
+        <p style="font-size:13px;color:var(--text2);line-height:1.6">Welcome! Set a password to create your account and access your stats.</p>
+      </div>
+      <div class="field"><label>Create Password</label><input type="password" id="new-pass-in" placeholder="Min. 6 characters"/></div>
+      <div class="field"><label>Confirm Password</label><input type="password" id="confirm-pass-in" placeholder="Repeat password"/></div>
+      <button class="btn-primary" onclick="createAccount()">Create Account</button>
+      <div class="login-error" id="login-err3"></div>
     </div>
   </div>
 </div>
@@ -461,12 +507,14 @@ async function loadData() {
 function processUsers(rows) {
   USERS = {};
   rows.forEach(r => {
-    const username = String(r['Username'] || '').trim().toLowerCase();
-    const password = String(r['Password'] || '').trim();
-    const role     = String(r['Role'] || '').trim().toLowerCase();
-    const num      = r['Player Number'] ? parseInt(r['Player Number']) : null;
-    if (!username || !password) return;
-    USERS[username] = { password, role, number: num };
+    const email1 = String(r['Email'] || '').trim().toLowerCase();
+    const email2 = String(r['Email 2'] || '').trim().toLowerCase();
+    const role   = String(r['Role'] || '').trim().toLowerCase();
+    const num    = r['Player Number'] ? parseInt(r['Player Number']) : null;
+    const hasAcc = !!r['Has Account'];
+    // Register both emails pointing to same player data
+    if (email1) USERS[email1] = { email: email1, role, number: num, hasAccount: hasAcc };
+    if (email2) USERS[email2] = { email: email2, role, number: num, hasAccount: hasAcc };
   });
 }
 
@@ -489,16 +537,113 @@ function nav(id) {
 }
 
 // ── Auth ───────────────────────────────────────────────────────
-function doLogin() {
-  const u = document.getElementById('u-in').value.trim().toLowerCase();
-  const p = document.getElementById('p-in').value.trim();
-  const user = USERS[u];
-  if (!user || user.password !== p) {
-    document.getElementById('login-err').textContent = 'Invalid username or password.';
+// ── Email step ─────────────────────────────────────────────────
+function checkEmail() {
+  const email = document.getElementById('email-in').value.trim().toLowerCase();
+  const err = document.getElementById('login-err');
+  if (!email || !email.includes('@')) { err.textContent = 'Please enter a valid email.'; return; }
+
+  // Check if email exists in Users sheet
+  const userEntry = Object.entries(USERS).find(([k,v]) => v.email && v.email.toLowerCase() === email);
+  if (!userEntry) {
+    err.textContent = 'Email not found. Please contact your coach.';
     return;
   }
+  err.textContent = '';
+  window._pendingEmail = email;
+  window._pendingUserKey = userEntry[0];
+
+  // Check if user has set a password (has firebase account)
+  const u = userEntry[1];
+  document.getElementById('email-display').value = email;
+
+  if (u.hasAccount) {
+    // Show password step
+    document.getElementById('step-email').style.display = 'none';
+    document.getElementById('step-password').style.display = 'block';
+  } else {
+    // Show set password step
+    document.getElementById('step-email').style.display = 'none';
+    document.getElementById('step-setpassword').style.display = 'block';
+  }
+}
+
+function backToEmail() {
+  document.getElementById('step-email').style.display = 'block';
+  document.getElementById('step-password').style.display = 'none';
+  document.getElementById('step-setpassword').style.display = 'none';
   document.getElementById('login-err').textContent = '';
-  currentUser = {...user, username: u};
+}
+
+// ── Sign in existing user ──────────────────────────────────────
+async function doLogin() {
+  const email = window._pendingEmail;
+  const password = document.getElementById('p-in').value;
+  const err = document.getElementById('login-err2');
+  if (!password) { err.textContent = 'Please enter your password.'; return; }
+  err.textContent = 'Signing in...';
+  try {
+    const auth = window._firebaseAuth;
+    const fns = window._firebaseFns;
+    await fns.signInWithEmailAndPassword(auth, email, password);
+    err.textContent = '';
+    loginSuccess(window._pendingUserKey);
+  } catch(e) {
+    err.textContent = e.code === 'auth/wrong-password' || e.code === 'auth/invalid-credential'
+      ? 'Incorrect password. Try again.'
+      : 'Sign in failed. Please try again.';
+  }
+}
+
+// ── Create new account ─────────────────────────────────────────
+async function createAccount() {
+  const email = window._pendingEmail;
+  const pass = document.getElementById('new-pass-in').value;
+  const confirm = document.getElementById('confirm-pass-in').value;
+  const err = document.getElementById('login-err3');
+  if (pass.length < 6) { err.textContent = 'Password must be at least 6 characters.'; return; }
+  if (pass !== confirm) { err.textContent = 'Passwords do not match.'; return; }
+  err.textContent = 'Creating account...';
+  try {
+    const auth = window._firebaseAuth;
+    const fns = window._firebaseFns;
+    await fns.createUserWithEmailAndPassword(auth, email, pass);
+    // Mark user as having account
+    const key = window._pendingUserKey;
+    if (USERS[key]) USERS[key].hasAccount = true;
+    err.textContent = '';
+    loginSuccess(key);
+  } catch(e) {
+    err.textContent = e.code === 'auth/email-already-in-use'
+      ? 'Account already exists. Please sign in.'
+      : 'Could not create account. Try again.';
+    if (e.code === 'auth/email-already-in-use') {
+      setTimeout(() => {
+        document.getElementById('step-setpassword').style.display = 'none';
+        document.getElementById('step-password').style.display = 'block';
+      }, 1500);
+    }
+  }
+}
+
+// ── Password reset ─────────────────────────────────────────────
+async function sendPasswordReset() {
+  const email = window._pendingEmail;
+  try {
+    const auth = window._firebaseAuth;
+    const fns = window._firebaseFns;
+    await fns.sendPasswordResetEmail(auth, email);
+    document.getElementById('login-err2').style.color = 'var(--green)';
+    document.getElementById('login-err2').textContent = 'Reset link sent to ' + email;
+  } catch(e) {
+    document.getElementById('login-err2').textContent = 'Could not send reset email.';
+  }
+}
+
+// ── Login success ──────────────────────────────────────────────
+function loginSuccess(userKey) {
+  const user = USERS[userKey];
+  currentUser = {...user, username: userKey};
 
   if (currentUser.role === 'player') {
     const pl = DB.players.find(pl => pl.num === currentUser.number);
@@ -515,14 +660,10 @@ function doLogin() {
   } else if (currentUser.role === 'admin') {
     currentUser.name = 'Admin';
     currentUser.initials = 'AD';
-  } else {
-    currentUser.name = u;
-    currentUser.initials = u.substring(0,2).toUpperCase();
   }
 
   document.getElementById('home-av').textContent = currentUser.initials || 'C';
   document.getElementById('welcome-name').innerHTML = '<span>' + currentUser.name + '</span>';
-
   const isStaff = currentUser.role === 'coach' || currentUser.role === 'admin';
   document.getElementById('role-badge').innerHTML = isStaff
     ? `<span class="coach-badge">${currentUser.role === 'admin' ? 'Admin' : 'Coach'}</span>`
@@ -532,8 +673,17 @@ function doLogin() {
 
 function doLogout() {
   currentUser = null;
-  document.getElementById('u-in').value = '';
-  document.getElementById('p-in').value = '';
+  window._pendingEmail = null;
+  window._pendingUserKey = null;
+  // Reset login steps
+  document.getElementById('step-email').style.display = 'block';
+  document.getElementById('step-password').style.display = 'none';
+  document.getElementById('step-setpassword').style.display = 'none';
+  document.getElementById('email-in').value = '';
+  if (document.getElementById('p-in')) document.getElementById('p-in').value = '';
+  if (window._firebaseAuth && window._firebaseFns) {
+    window._firebaseFns.signOut(window._firebaseAuth);
+  }
   show('login');
 }
 
@@ -608,11 +758,16 @@ function showDetail(num, fromSection) {
     ).join('');
   }
   show('player-detail');
+  // Init benchmark charts after DOM renders
+  setTimeout(() => {
+    if (typeof initBenchCharts === 'function') initBenchCharts();
+  }, 50);
 }
 
 function switchTab(i) {
   document.querySelectorAll('.tab').forEach((t,j) => t.classList.toggle('active', i===j));
   document.querySelectorAll('.tab-content').forEach((t,j) => t.classList.toggle('active', i===j));
+  if (i === 0) setTimeout(() => { if (typeof initBenchCharts === 'function') initBenchCharts(); }, 50);
 }
 
 // ── Content builders ───────────────────────────────────────────
@@ -631,15 +786,183 @@ function srow(label, val) {
 function buildBench(b) {
   const keys = Object.keys(b).filter(k=>k!=='num');
   if (!keys.length) return '<div class="no-data">No benchmark data recorded yet.</div>';
-  return [
+
+  const groups = [
     ['Dribble', ['5 m Dribble','10 m Dribble'], 's'],
     ['Figure 8', ['1 m Fig 8','2 m Fig 8','4 m Fig 8'], 's'],
     ['Star', ['1m Star','2m Star','4m Star'], 's'],
     ['Turning', ['2 m Turning','4 m Turning'], 's'],
     ['Other', ['M Test','Futsalnout','First Round','Second Round'], 's']
-  ].map(([title, ks, u]) =>
-    `<div class="mg"><h4>${title}</h4>${ks.map(k=>mrow(k.replace(' m ',' ').replace('1m','1m').replace('2m','2m').replace('4m','4m'),b[k],u)).join('')}</div>`
+  ];
+
+  const metricsHTML = groups.map(([title, ks, u]) =>
+    `<div class="mg"><h4>${title}</h4>${ks.map(k=>mrow(k.replace(' m ',' '),b[k],u)).join('')}</div>`
   ).join('');
+
+  const driVals = [b['5 m Dribble'], b['10 m Dribble']];
+  const driLbls = ['5m', '10m'];
+  const fig8Vals = [b['1 m Fig 8'], b['2 m Fig 8'], b['4 m Fig 8']];
+  const fig8Lbls = ['1m', '2m', '4m'];
+  const starVals = [b['1m Star'], b['2m Star'], b['4m Star']];
+  const starLbls = ['1m', '2m', '4m'];
+
+  const hasDri  = driVals.some(v=>v!=null);
+  const hasFig8 = fig8Vals.some(v=>v!=null);
+  const hasStar = starVals.some(v=>v!=null);
+
+  const chartsHTML = (hasDri || hasFig8 || hasStar) ? `
+    ${hasDri ? `<div class="chart-section">
+      <h4>Dribble (seconds)</h4>
+      <div class="chart-wrap-sm"><canvas id="bench-dribble-chart"></canvas></div>
+    </div>` : ''}
+    ${hasFig8 ? `<div class="chart-section">
+      <h4>Figure 8 (seconds)</h4>
+      <div class="chart-wrap-sm"><canvas id="bench-fig8-chart"></canvas></div>
+    </div>` : ''}
+    ${hasStar ? `<div class="chart-section">
+      <h4>Star Drill (seconds)</h4>
+      <div class="chart-wrap-sm"><canvas id="bench-star-chart"></canvas></div>
+    </div>` : ''}
+  ` : '';
+
+  window._benchChartData = { driVals, driLbls, fig8Vals, fig8Lbls, starVals, starLbls, hasDri, hasFig8, hasStar };
+
+  return chartsHTML + metricsHTML;
+}
+
+function initBenchCharts() {
+  const d = window._benchChartData;
+  if (!d) return;
+
+  const baseOpts = () => ({
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false },
+      tooltip: { enabled: false }
+    },
+    scales: {
+      x: {
+        ticks: { color: '#8b91a0', font: { size: 11 } },
+        grid: { color: 'rgba(255,255,255,0.04)' }
+      },
+      y: {
+        ticks: {
+          color: '#8b91a0',
+          font: { size: 11 },
+          maxTicksLimit: 6,
+          callback: v => parseFloat(v).toFixed(1) + 's'
+        },
+        grid: { color: 'rgba(255,255,255,0.04)' },
+        beginAtZero: true
+      }
+    },
+    animation: { duration: 600, easing: 'easeInOutQuart' }
+  });
+
+  // Custom plugin to draw data labels on points/bars
+  const dataLabelPlugin = {
+    id: 'customDataLabels',
+    afterDatasetsDraw(chart) {
+      const ctx = chart.ctx;
+      chart.data.datasets.forEach((dataset, i) => {
+        const meta = chart.getDatasetMeta(i);
+        meta.data.forEach((element, index) => {
+          const val = dataset.data[index];
+          if (val == null) return;
+          const label = val.toFixed(2) + 's';
+          ctx.save();
+          ctx.font = '500 10px Barlow, sans-serif';
+          ctx.fillStyle = 'rgba(255,255,255,0.75)';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'bottom';
+          const x = element.x;
+          const y = chart.config.type === 'bar' ? element.y - 5 : element.y - 8;
+          ctx.fillText(label, x, y);
+          ctx.restore();
+        });
+      });
+    }
+  };
+
+  const blue   = 'rgba(26,110,245,0.9)';
+  const blueBg = 'rgba(26,110,245,0.15)';
+  const green  = 'rgba(29,185,84,0.9)';
+  const greenBg= 'rgba(29,185,84,0.15)';
+  const amber  = 'rgba(240,165,0,0.9)';
+  const amberBg= 'rgba(240,165,0,0.15)';
+  const purple = 'rgba(124,92,191,0.9)';
+  const purpleBg='rgba(124,92,191,0.15)';
+
+  if (d.hasDri && document.getElementById('bench-dribble-chart')) {
+    const filtered = d.driLbls.map((l,i)=>({l,v:d.driVals[i]})).filter(x=>x.v!=null);
+    new Chart(document.getElementById('bench-dribble-chart'), {
+      type: 'bar',
+      data: {
+        labels: filtered.map(x=>x.l),
+        datasets: [{
+          data: filtered.map(x=>x.v),
+          backgroundColor: [greenBg, amberBg],
+          borderColor: [green, amber],
+          borderWidth: 2,
+          borderRadius: 8,
+          borderSkipped: false
+        }]
+      },
+      options: baseOpts(),
+      plugins: [dataLabelPlugin]
+    });
+  }
+
+  if (d.hasFig8 && document.getElementById('bench-fig8-chart')) {
+    const filtered = d.fig8Lbls.map((l,i)=>({l,v:d.fig8Vals[i]})).filter(x=>x.v!=null);
+    new Chart(document.getElementById('bench-fig8-chart'), {
+      type: 'line',
+      data: {
+        labels: filtered.map(x=>x.l),
+        datasets: [{
+          data: filtered.map(x=>x.v),
+          borderColor: blue,
+          backgroundColor: blueBg,
+          borderWidth: 2.5,
+          pointBackgroundColor: blue,
+          pointBorderColor: 'rgba(255,255,255,0.8)',
+          pointBorderWidth: 1.5,
+          pointRadius: 5,
+          pointHoverRadius: 7,
+          fill: true,
+          tension: 0.35
+        }]
+      },
+      options: baseOpts(),
+      plugins: [dataLabelPlugin]
+    });
+  }
+
+  if (d.hasStar && document.getElementById('bench-star-chart')) {
+    const filtered = d.starLbls.map((l,i)=>({l,v:d.starVals[i]})).filter(x=>x.v!=null);
+    new Chart(document.getElementById('bench-star-chart'), {
+      type: 'line',
+      data: {
+        labels: filtered.map(x=>x.l),
+        datasets: [{
+          data: filtered.map(x=>x.v),
+          borderColor: purple,
+          backgroundColor: purpleBg,
+          borderWidth: 2.5,
+          pointBackgroundColor: purple,
+          pointBorderColor: 'rgba(255,255,255,0.8)',
+          pointBorderWidth: 1.5,
+          pointRadius: 5,
+          pointHoverRadius: 7,
+          fill: true,
+          tension: 0.35
+        }]
+      },
+      options: baseOpts(),
+      plugins: [dataLabelPlugin]
+    });
+  }
 }
 
 function buildEval(e) {
@@ -737,7 +1060,7 @@ function extractYouTubeId(url) {
 }
 
 // ── Boot ───────────────────────────────────────────────────────
-document.getElementById('p-in').addEventListener('keydown', e => { if(e.key==='Enter') doLogin(); });
+document.getElementById('email-in').addEventListener('keydown', e => { if(e.key==='Enter') checkEmail(); });
 loadData();
 </script>
 </body>
