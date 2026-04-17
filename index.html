@@ -159,7 +159,7 @@ body{font-family:'Barlow',sans-serif;background:#000;display:flex;justify-conten
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail, fetchSignInMethodsForEmail, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyBI3EE638KidKbw4iTk8DOJMCYBSJQoJIE",
@@ -173,7 +173,7 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 window._firebaseAuth = auth;
-window._firebaseFns = { signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail, signOut };
+window._firebaseFns = { signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail, fetchSignInMethodsForEmail, signOut };
 
 onAuthStateChanged(auth, user => {
   if (user) window._firebaseUser = user;
@@ -507,14 +507,14 @@ async function loadData() {
 function processUsers(rows) {
   USERS = {};
   rows.forEach(r => {
-    const email1 = String(r['Email'] || '').trim().toLowerCase();
-    const email2 = String(r['Email 2'] || '').trim().toLowerCase();
-    const role   = String(r['Role'] || '').trim().toLowerCase();
-    const num    = r['Player Number'] ? parseInt(r['Player Number']) : null;
-    const hasAcc = !!r['Has Account'];
-    // Register both emails pointing to same player data
-    if (email1) USERS[email1] = { email: email1, role, number: num, hasAccount: hasAcc };
-    if (email2) USERS[email2] = { email: email2, role, number: num, hasAccount: hasAcc };
+    const email1    = String(r['Email'] || '').trim().toLowerCase();
+    const email2    = String(r['Email 2'] || '').trim().toLowerCase();
+    const role      = String(r['Role'] || '').trim().toLowerCase();
+    const num       = r['Player Number'] ? parseInt(r['Player Number']) : null;
+    const name      = String(r['Player Name'] || '').trim();
+    const hasAcct   = String(r['Has Account'] || '').trim().toUpperCase() === 'YES';
+    if (email1) USERS[email1] = { email: email1, role, number: num, name, hasAccount: hasAcct };
+    if (email2) USERS[email2] = { email: email2, role, number: num, name, hasAccount: hasAcct };
   });
 }
 
@@ -552,17 +552,13 @@ function checkEmail() {
   err.textContent = '';
   window._pendingEmail = email;
   window._pendingUserKey = userEntry[0];
-
-  // Check if user has set a password (has firebase account)
-  const u = userEntry[1];
   document.getElementById('email-display').value = email;
 
+  const u = userEntry[1];
   if (u.hasAccount) {
-    // Show password step
     document.getElementById('step-email').style.display = 'none';
     document.getElementById('step-password').style.display = 'block';
   } else {
-    // Show set password step
     document.getElementById('step-email').style.display = 'none';
     document.getElementById('step-setpassword').style.display = 'block';
   }
@@ -610,7 +606,6 @@ async function createAccount() {
     await fns.createUserWithEmailAndPassword(auth, email, pass);
     // Mark user as having account
     const key = window._pendingUserKey;
-    if (USERS[key]) USERS[key].hasAccount = true;
     err.textContent = '';
     loginSuccess(key);
   } catch(e) {
@@ -641,29 +636,47 @@ async function sendPasswordReset() {
 }
 
 // ── Login success ──────────────────────────────────────────────
+function formatWelcomeName(fullName) {
+  if (!fullName) return '';
+  const parts = fullName.trim().split(' ');
+  if (parts.length === 1) return parts[0];
+  const first = parts[0];
+  const lastInitial = parts[parts.length - 1][0].toUpperCase();
+  return first + ' ' + lastInitial + '.';
+}
+
 function loginSuccess(userKey) {
   const user = USERS[userKey];
   currentUser = {...user, username: userKey};
 
   if (currentUser.role === 'player') {
+    // Try Player Name from Users sheet first, then fall back to Players sheet
+    const sheetName = user.name || '';
     const pl = DB.players.find(pl => pl.num === currentUser.number);
-    if (pl) {
-      currentUser.name = pl.name;
-      currentUser.initials = pl.name.split(' ').map(n=>n[0]).join('').substring(0,2).toUpperCase();
+    const fullName = sheetName || (pl ? pl.name : '');
+    if (fullName) {
+      currentUser.name = fullName;
+      currentUser.displayName = formatWelcomeName(fullName);
+      currentUser.initials = fullName.split(' ').map(n=>n[0]).join('').substring(0,2).toUpperCase();
     } else {
       currentUser.name = 'Player #' + currentUser.number;
+      currentUser.displayName = 'Player #' + currentUser.number;
       currentUser.initials = 'P';
     }
   } else if (currentUser.role === 'coach') {
-    currentUser.name = 'Coach';
-    currentUser.initials = 'CO';
+    const sheetName = user.name || '';
+    currentUser.name = sheetName || 'Coach';
+    currentUser.displayName = formatWelcomeName(sheetName) || 'Coach';
+    currentUser.initials = sheetName ? sheetName.split(' ').map(n=>n[0]).join('').substring(0,2).toUpperCase() : 'CO';
   } else if (currentUser.role === 'admin') {
-    currentUser.name = 'Admin';
-    currentUser.initials = 'AD';
+    const sheetName = user.name || '';
+    currentUser.name = sheetName || 'Admin';
+    currentUser.displayName = formatWelcomeName(sheetName) || 'Admin';
+    currentUser.initials = sheetName ? sheetName.split(' ').map(n=>n[0]).join('').substring(0,2).toUpperCase() : 'AD';
   }
 
   document.getElementById('home-av').textContent = currentUser.initials || 'C';
-  document.getElementById('welcome-name').innerHTML = '<span>' + currentUser.name + '</span>';
+  document.getElementById('welcome-name').innerHTML = '<span>' + (currentUser.displayName || currentUser.name) + '</span>';
   const isStaff = currentUser.role === 'coach' || currentUser.role === 'admin';
   document.getElementById('role-badge').innerHTML = isStaff
     ? `<span class="coach-badge">${currentUser.role === 'admin' ? 'Admin' : 'Coach'}</span>`
