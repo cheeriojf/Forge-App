@@ -561,7 +561,7 @@ function nav(id) {
 
 // ── Auth ───────────────────────────────────────────────────────
 // ── Email step ─────────────────────────────────────────────────
-function checkEmail() {
+async function checkEmail() {
   const email = document.getElementById('email-in').value.trim().toLowerCase();
   const err = document.getElementById('login-err');
   if (!email || !email.includes('@')) { err.textContent = 'Please enter a valid email.'; return; }
@@ -572,18 +572,37 @@ function checkEmail() {
     err.textContent = 'Email not found. Please contact your coach.';
     return;
   }
-  err.textContent = '';
+  err.textContent = 'Checking...';
   window._pendingEmail = email;
   window._pendingUserKey = userEntry[0];
   document.getElementById('email-display').value = email;
 
-  const u = userEntry[1];
-  if (u.hasAccount) {
-    document.getElementById('step-email').style.display = 'none';
-    document.getElementById('step-password').style.display = 'block';
-  } else {
-    document.getElementById('step-email').style.display = 'none';
-    document.getElementById('step-setpassword').style.display = 'block';
+  // Always verify with Firebase directly — sheet may be out of date
+  try {
+    const auth = window._firebaseAuth;
+    const fns = window._firebaseFns;
+    const methods = await fns.fetchSignInMethodsForEmail(auth, email);
+    err.textContent = '';
+    if (methods && methods.length > 0) {
+      // Firebase confirms account exists — show password step
+      document.getElementById('step-email').style.display = 'none';
+      document.getElementById('step-password').style.display = 'block';
+    } else {
+      // No Firebase account yet — show set password step
+      document.getElementById('step-email').style.display = 'none';
+      document.getElementById('step-setpassword').style.display = 'block';
+    }
+  } catch(e) {
+    err.textContent = '';
+    // If Firebase check fails, fall back to sheet
+    const u = userEntry[1];
+    if (u.hasAccount) {
+      document.getElementById('step-email').style.display = 'none';
+      document.getElementById('step-password').style.display = 'block';
+    } else {
+      document.getElementById('step-email').style.display = 'none';
+      document.getElementById('step-setpassword').style.display = 'block';
+    }
   }
 }
 
