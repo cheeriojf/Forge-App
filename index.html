@@ -218,14 +218,14 @@ onAuthStateChanged(auth, user => {
       <button style="width:100%;background:none;border:none;color:var(--text2);font-size:13px;cursor:pointer;margin-top:12px;padding:8px" onclick="sendPasswordReset()">Forgot password?</button>
       <div class="login-error" id="login-err2"></div>
     </div>
-    <!-- Step 3: Set password (new user) -->
+    <!-- Step 3: New user - send setup link -->
     <div id="step-setpassword" style="display:none">
-      <div style="background:rgba(26,110,245,0.1);border:1px solid rgba(26,110,245,0.3);border-radius:10px;padding:14px;margin-bottom:16px">
-        <p style="font-size:13px;color:var(--text2);line-height:1.6">Welcome! Set a password to create your account and access your stats.</p>
+      <div style="background:rgba(26,110,245,0.1);border:1px solid rgba(26,110,245,0.3);border-radius:10px;padding:16px;margin-bottom:20px">
+        <p style="font-size:14px;color:var(--text);font-weight:600;margin-bottom:6px">Welcome to Forge!</p>
+        <p style="font-size:13px;color:var(--text2);line-height:1.6">We'll send a setup link to your email. Click it to create your password, then come back and sign in.</p>
       </div>
-      <div class="field"><label>Create Password</label><input type="password" id="new-pass-in" placeholder="Min. 6 characters"/></div>
-      <div class="field"><label>Confirm Password</label><input type="password" id="confirm-pass-in" placeholder="Repeat password"/></div>
-      <button class="btn-primary" onclick="createAccount()">Create Account</button>
+      <button class="btn-primary" onclick="sendSetupLink()">Send Setup Link</button>
+      <button style="background:none;border:none;color:var(--text3);font-size:12px;cursor:pointer;margin-top:10px;width:100%;padding:8px" onclick="backToEmail()">← Use a different email</button>
       <div class="login-error" id="login-err3"></div>
     </div>
   </div>
@@ -405,18 +405,18 @@ onAuthStateChanged(auth, user => {
   <div class="detail-body" id="detail-body"></div>
 </div>
 
-<!-- VERIFICATION PENDING -->
+<!-- EMAIL SENT SCREEN -->
 <div id="verify-screen" class="screen">
   <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:2.5rem 2rem;text-align:center;background:var(--bg)">
     <div style="width:70px;height:70px;background:rgba(26,110,245,0.15);border-radius:50%;display:flex;align-items:center;justify-content:center;margin-bottom:20px;border:2px solid rgba(26,110,245,0.3)">
       <svg viewBox="0 0 32 32" fill="none" style="width:32px;height:32px"><rect x="2" y="6" width="28" height="20" rx="4" stroke="#1a6ef5" stroke-width="2"/><path d="M2 10l14 9 14-9" stroke="#1a6ef5" stroke-width="2" stroke-linecap="round"/></svg>
     </div>
-    <h2 style="font-family:'Barlow Condensed',sans-serif;font-size:26px;font-weight:700;margin-bottom:10px">Check your email</h2>
-    <p style="font-size:14px;color:var(--text2);line-height:1.7;margin-bottom:6px">We sent a verification link to</p>
-    <p style="font-size:15px;font-weight:600;color:var(--accent);margin-bottom:20px" id="verify-email-display"></p>
-    <p style="font-size:13px;color:var(--text3);line-height:1.7;margin-bottom:28px">Click the link in the email to verify your account, then come back and sign in.</p>
+    <h2 style="font-family:'Barlow Condensed',sans-serif;font-size:26px;font-weight:700;margin-bottom:10px" id="verify-title">Check your email</h2>
+    <p style="font-size:14px;color:var(--text2);line-height:1.7;margin-bottom:6px" id="verify-subtitle">We sent a link to</p>
+    <p style="font-size:15px;font-weight:600;color:var(--accent);margin-bottom:16px" id="verify-email-display"></p>
+    <p style="font-size:13px;color:var(--text3);line-height:1.7;margin-bottom:28px" id="verify-body">Click the link to set your password, then come back and sign in with your email and password.</p>
     <button class="btn-primary" onclick="backToLoginFromVerify()" style="margin-bottom:12px">Back to Sign In</button>
-    <button id="resend-btn" onclick="resendVerification()" style="background:none;border:none;color:var(--accent);font-size:13px;cursor:pointer;padding:8px">Resend verification email</button>
+    <button id="resend-btn" onclick="resendSetupLink()" style="background:none;border:none;color:var(--accent);font-size:13px;cursor:pointer;padding:8px">Resend email</button>
     <div id="resend-msg" style="font-size:12px;color:var(--green);margin-top:8px;min-height:18px"></div>
   </div>
 </div>
@@ -624,13 +624,7 @@ async function doLogin() {
     const auth = window._firebaseAuth;
     const fns = window._firebaseFns;
     const userCredential = await fns.signInWithEmailAndPassword(auth, email, password);
-    // Check if email is verified
-    if (!userCredential.user.emailVerified) {
-      await fns.signOut(auth);
-      err.textContent = '';
-      showVerificationPending(email, true);
-      return;
-    }
+    // Email verified - proceed to login
     err.textContent = '';
     loginSuccess(window._pendingUserKey);
   } catch(e) {
@@ -1122,11 +1116,24 @@ function extractYouTubeId(url) {
   return match ? match[1] : null;
 }
 
-// ── Email verification ────────────────────────────────────────
-function showVerificationPending(email, isResend=false) {
+// ── Email sent screens ────────────────────────────────────────
+function showSetupLinkSent(email) {
   window._verifyEmail = email;
   document.getElementById('verify-email-display').textContent = email;
-  document.getElementById('resend-msg').textContent = isResend ? 'Please verify your email before signing in.' : '';
+  document.getElementById('verify-title').textContent = 'Check your email';
+  document.getElementById('verify-subtitle').textContent = 'We sent a password setup link to';
+  document.getElementById('verify-body').textContent = 'Click the link in the email to set your password. Once done, come back here and sign in with your email and new password.';
+  document.getElementById('resend-msg').textContent = '';
+  show('verify-screen');
+}
+
+function showVerificationPending(email) {
+  window._verifyEmail = email;
+  document.getElementById('verify-email-display').textContent = email;
+  document.getElementById('verify-title').textContent = 'Verify your email';
+  document.getElementById('verify-subtitle').textContent = 'Please verify your email before signing in.';
+  document.getElementById('verify-body').textContent = 'Check your inbox and click the verification link, then come back and sign in.';
+  document.getElementById('resend-msg').textContent = '';
   show('verify-screen');
 }
 
@@ -1135,9 +1142,10 @@ function backToLoginFromVerify() {
   document.getElementById('step-email').style.display = 'block';
   document.getElementById('step-password').style.display = 'none';
   document.getElementById('step-setpassword').style.display = 'none';
+  document.getElementById('login-err').textContent = '';
 }
 
-async function resendVerification() {
+async function resendSetupLink() {
   const btn = document.getElementById('resend-btn');
   const msg = document.getElementById('resend-msg');
   btn.disabled = true;
@@ -1145,16 +1153,8 @@ async function resendVerification() {
   try {
     const auth = window._firebaseAuth;
     const fns = window._firebaseFns;
-    const email = window._verifyEmail;
-    const password = document.getElementById('new-pass-in') ? document.getElementById('new-pass-in').value : null;
-    if (password) {
-      const uc = await fns.signInWithEmailAndPassword(auth, email, password).catch(()=>null);
-      if (uc) {
-        await fns.sendEmailVerification(uc.user);
-        await fns.signOut(auth);
-      }
-    }
-    msg.textContent = 'Verification email resent!';
+    await fns.sendPasswordResetEmail(auth, window._verifyEmail);
+    msg.textContent = 'Email resent!';
     msg.style.color = 'var(--green)';
   } catch(e) {
     msg.textContent = 'Could not resend. Please try again.';
