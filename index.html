@@ -218,14 +218,26 @@ onAuthStateChanged(auth, user => {
       <button style="width:100%;background:none;border:none;color:var(--text2);font-size:13px;cursor:pointer;margin-top:12px;padding:8px" onclick="sendPasswordReset()">Forgot password?</button>
       <div class="login-error" id="login-err2"></div>
     </div>
-    <!-- Step 3: New user - send setup link -->
+    <!-- Step 3: New user - send setup email -->
     <div id="step-setpassword" style="display:none">
       <div style="background:rgba(26,110,245,0.1);border:1px solid rgba(26,110,245,0.3);border-radius:10px;padding:16px;margin-bottom:20px">
         <p style="font-size:14px;color:var(--text);font-weight:600;margin-bottom:6px">Welcome to Forge!</p>
         <p style="font-size:13px;color:var(--text2);line-height:1.6">We'll send a setup link to your email. Click it to create your password, then come back and sign in.</p>
       </div>
-      <button class="btn-primary" onclick="sendSetupLink()">Send Setup Link</button>
+      <button class="btn-primary" onclick="sendSetupEmail()">Send Setup Link</button>
       <button style="background:none;border:none;color:var(--text3);font-size:12px;cursor:pointer;margin-top:10px;width:100%;padding:8px" onclick="backToEmail()">← Use a different email</button>
+      <div class="login-error" id="login-err3"></div>
+    </div>
+
+    <!-- Step 4: Set password (arrived via setup link) -->
+    <div id="step-newpassword" style="display:none">
+      <div style="background:rgba(29,185,84,0.1);border:1px solid rgba(29,185,84,0.3);border-radius:10px;padding:16px;margin-bottom:20px">
+        <p style="font-size:14px;color:var(--text);font-weight:600;margin-bottom:6px">✓ Email confirmed!</p>
+        <p style="font-size:13px;color:var(--text2);line-height:1.6">Now create a password to complete your account setup.</p>
+      </div>
+      <div class="field"><label>Create Password</label><input type="password" id="new-pass-in" placeholder="Min. 6 characters"/></div>
+      <div class="field"><label>Confirm Password</label><input type="password" id="confirm-pass-in" placeholder="Repeat password"/></div>
+      <button class="btn-primary" onclick="createAccount()">Complete Setup</button>
       <div class="login-error" id="login-err3"></div>
     </div>
   </div>
@@ -520,12 +532,15 @@ async function loadData() {
     DB.training   = processTraining(raw['Training Modules'] || []);
     processUsers(raw['Users'] || []);
     show('login');
-    // Check if user arrived via magic link
-    await checkForEmailLink();
-    // Handle pending magic link login after data loaded
-    if (window._pendingMagicEmail) {
-      const userEntry = Object.entries(USERS).find(([k,v]) => v.email && v.email.toLowerCase() === window._pendingMagicEmail);
-      if (userEntry) { loginSuccess(userEntry[0]); window._pendingMagicEmail = null; }
+    if (window._showSetupOnLoad && window._pendingEmail) {
+      const email = window._pendingEmail;
+      const userEntry = Object.entries(USERS).find(([k,v]) => v.email && v.email.toLowerCase() === email.toLowerCase());
+      if (userEntry) {
+        window._pendingUserKey = userEntry[0];
+        document.getElementById('step-email').style.display = 'none';
+        document.getElementById('step-newpassword').style.display = 'block';
+        window._showSetupOnLoad = false;
+      }
     }
   } catch(e) {
     console.error(e);
@@ -1177,6 +1192,16 @@ async function resendSetupLink() {
 
 // ── Boot ───────────────────────────────────────────────────────
 document.getElementById('email-in').addEventListener('keydown', e => { if(e.key==='Enter') checkEmail(); });
+
+// Check if user arrived via setup link (?setup=email)
+const urlParams = new URLSearchParams(window.location.search);
+const setupEmail = urlParams.get('setup');
+if (setupEmail) {
+  window._pendingEmail = decodeURIComponent(setupEmail);
+  // Wait for data to load then show password creation
+  window._showSetupOnLoad = true;
+}
+
 loadData();
 </script>
 </body>
