@@ -1128,32 +1128,11 @@ async function sendSetupLink() {
   err.textContent = 'Sending link...';
   err.style.color = 'var(--text2)';
   try {
-    const auth = window._firebaseAuth;
-    const fns = window._firebaseFns;
+    // Generate a setup token and store it
+    const token = btoa(email + ':' + Date.now());
+    const setupLink = 'https://julian-fratta.github.io/Forge-App/?setup=' + encodeURIComponent(token);
 
-    // Step 1: Create Firebase account with temp password
-    const tempPass = 'Forge!' + Math.random().toString(36).substring(2,10) + 'A1';
-    try {
-      await fns.createUserWithEmailAndPassword(auth, email, tempPass);
-      await fns.signOut(auth);
-    } catch(createErr) {
-      if (createErr.code !== 'auth/email-already-in-use') throw createErr;
-    }
-
-    // Step 2: Trigger Firebase password reset (generates real password page link)
-    await new Promise(r => setTimeout(r, 1000));
-    const resetResp = await fetch(
-      'https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key=AIzaSyBI3EE638KidKbw4iTk8DOJMCYBSJQoJIE',
-      {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({requestType: 'PASSWORD_RESET', email: email})
-      }
-    );
-    const resetData = await resetResp.json();
-    console.log('Reset response:', resetData);
-
-    // Step 3: Send welcome email via EmailJS with instructions
+    // Send email via EmailJS with the setup link
     const userEntry = Object.entries(USERS).find(([k,v]) => v.email && v.email.toLowerCase() === email.toLowerCase());
     const userName = userEntry ? (userEntry[1].name || email.split('@')[0]) : email.split('@')[0];
 
@@ -1161,12 +1140,14 @@ async function sendSetupLink() {
       to_email: email,
       to_name: userName,
       from_name: 'Forge Performance',
-      reset_link: 'https://forge-performance-13603.firebaseapp.com/__/auth/action?mode=resetPassword',
-      message: 'Welcome to Forge Performance! Check your inbox for a separate email from Firebase with subject "Reset your password for Forge Performance" — click that link to set your password. Then return to the app and sign in with your email and new password.',
+      reset_link: setupLink,
+      message: 'Welcome to Forge Performance! Click the link below to set up your password and access your performance data.',
       reply_to: 'noreply@forgeperformance.com'
     });
 
-    fetch(APPS_SCRIPT_URL + '?action=setHasAccount&email=' + encodeURIComponent(email)).catch(()=>{});
+    // Store token in Apps Script so we can verify it
+    fetch(APPS_SCRIPT_URL + '?action=storeToken&email=' + encodeURIComponent(email) + '&token=' + encodeURIComponent(token)).catch(()=>{});
+    
     err.textContent = '';
     showSetupLinkSent(email);
   } catch(e) {
@@ -1229,6 +1210,66 @@ async function resendSetupLink() {
   setTimeout(() => { btn.disabled = false; btn.style.opacity = '1'; }, 30000);
 }
 
+
+// ── Create account with chosen password ───────────────────────
+async function createAccount() {
+  const email = window._pendingEmail;
+  const pass = document.getElementById('new-pass-in').value;
+  const confirm = document.getElementById('confirm-pass-in').value;
+  const err = document.getElementById('login-err4');
+  if (pass.length < 6) { err.textContent = 'Password must be at least 6 characters.'; return; }
+  if (pass !== confirm) { err.textContent = 'Passwords do not match.'; return; }
+  err.textContent = 'Creating account...';
+  try {
+    const auth = window._firebaseAuth;
+    const fns = window._firebaseFns;
+    // Try to create account, if exists update password
+    try {
+      await fns.createUserWithEmailAndPassword(auth, email, pass);
+    } catch(e) {
+      if (e.code === 'auth/email-already-in-use') {
+        // Sign in with temp password and update
+        err.textContent = 'Account exists - please use Forgot Password to set your password.';
+        document.getElementById('step-createpassword').style.display = 'none';
+        document.getElementById('step-password').style.display = 'block';
+        document.getElementById('email-display').value = email;
+        return;
+      }
+      throw e;
+    }
+    fetch(APPS_SCRIPT_URL + '?action=setHasAccount&email=' + encodeURIComponent(email)).catch(()=>{});
+    err.textContent = '';
+    const userKey = window._pendingUserKey || email;
+    loginSuccess(userKey);
+  } catch(e) {
+    err.textContent = 'Error: ' + (e.message || e.code);
+  }
+}
+
+// ── Check for setup link on load ──────────────────────────────
+function checkSetupLink() {
+  const params = new URLSearchParams(window.location.search);
+  const token = params.get('setup');
+  if (!token) return;
+  try {
+    const decoded = atob(token);
+    const email = decoded.split(':')[0].toLowerCase();
+    window._pendingEmail = email;
+    // Find user in USERS
+    const userEntry = Object.entries(USERS).find(([k,v]) => v.email && v.email.toLowerCase() === email);
+    if (userEntry) window._pendingUserKey = userEntry[0];
+    document.getElementById('email-display').value = email;
+    // Show create password screen
+    document.getElementById('step-email').style.display = 'none';
+    document.getElementById('step-password').style.display = 'none';
+    document.getElementById('step-setpassword').style.display = 'none';
+    document.getElementById('step-createpassword').style.display = 'block';
+    // Clean URL
+    window.history.replaceState({}, document.title, window.location.pathname);
+  } catch(e) {
+    console.error('Setup link error:', e);
+  }
+}
 
 // ── Boot ───────────────────────────────────────────────────────
 document.getElementById('email-in').addEventListener('keydown', e => { if(e.key==='Enter') checkEmail(); });
