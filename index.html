@@ -466,9 +466,10 @@ const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycby0bYsFFDeT8FCx
     try {
       const decoded = atob(decodeURIComponent(token));
       const email = decoded.split(':')[0].toLowerCase();
-      sessionStorage.setItem('forgeSetupEmail', email);
+      // Store in window variable - persists for this page load
+      window._setupEmail = email;
       window.history.replaceState({}, document.title, window.location.pathname);
-    } catch(e) {}
+    } catch(e) { console.error('Token decode error:', e); }
   }
 })();
 
@@ -1262,9 +1263,9 @@ async function createAccount() {
 
 // ── Check for setup link on load ──────────────────────────────
 function checkSetupLink() {
-  const email = sessionStorage.getItem('forgeSetupEmail');
+  const email = window._setupEmail;
   if (!email) return;
-  sessionStorage.removeItem('forgeSetupEmail');
+  window._setupEmail = null;
   window._pendingEmail = email;
   const userEntry = Object.entries(USERS).find(([k,v]) => v.email && v.email.toLowerCase() === email);
   if (userEntry) window._pendingUserKey = userEntry[0];
@@ -1272,6 +1273,7 @@ function checkSetupLink() {
     document.getElementById(id).style.display = 'none';
   });
   document.getElementById('step-createpassword').style.display = 'block';
+  console.log('Showing create password for:', email);
 }
 
 // ── Boot ───────────────────────────────────────────────────────
