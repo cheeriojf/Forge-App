@@ -559,12 +559,13 @@ async function loadData() {
 function processUsers(rows) {
   USERS = {};
   rows.forEach(r => {
-    const email1    = String(r['Email'] || '').trim().toLowerCase();
-    const email2    = String(r['Email 2'] || '').trim().toLowerCase();
-    const role      = String(r['Role'] || '').trim().toLowerCase();
-    const num       = r['Player Number'] ? parseInt(r['Player Number']) : null;
-    const name      = String(r['Player Name'] || '').trim();
-    const hasAcct   = String(r['Has Account'] || '').trim().toUpperCase() === 'YES';
+    const email1  = String(r['Email'] || '').trim().toLowerCase();
+    const email2  = String(r['Email 2'] || '').trim().toLowerCase();
+    const role    = String(r['Role'] || '').trim().toLowerCase();
+    const num     = r['Player Number'] ? parseInt(r['Player Number']) : null;
+    const name    = String(r['Player Name'] || '').trim();
+    const hasAcct = String(r['Has Account'] || '').trim().toUpperCase() === 'YES';
+    console.log('User:', email1, 'hasAccount:', hasAcct);
     if (email1) USERS[email1] = { email: email1, role, number: num, name, hasAccount: hasAcct };
     if (email2) USERS[email2] = { email: email2, role, number: num, name, hasAccount: hasAcct };
   });
@@ -591,57 +592,28 @@ function nav(id) {
 
 // ── Auth ───────────────────────────────────────────────────────
 // ── Email step ─────────────────────────────────────────────────
-async function checkEmail() {
+function checkEmail() {
   const email = document.getElementById('email-in').value.trim().toLowerCase();
   const err = document.getElementById('login-err');
   if (!email || !email.includes('@')) { err.textContent = 'Please enter a valid email.'; return; }
 
-  // Check if email exists in Users sheet
   const userEntry = Object.entries(USERS).find(([k,v]) => v.email && v.email.toLowerCase() === email);
-  if (!userEntry) {
-    err.textContent = 'Email not found. Please contact your coach.';
-    return;
-  }
-  err.textContent = 'Checking...';
+  if (!userEntry) { err.textContent = 'Email not found. Please contact your coach.'; return; }
+
+  err.textContent = '';
   window._pendingEmail = email;
   window._pendingUserKey = userEntry[0];
   document.getElementById('email-display').value = email;
 
-  // Always verify with Firebase directly — sheet may be out of date
-  try {
-    const auth = window._firebaseAuth;
-    const fns = window._firebaseFns;
-    const methods = await fns.fetchSignInMethodsForEmail(auth, email);
-    err.textContent = '';
-    if (methods && methods.length > 0) {
-      // Firebase confirms account exists — show password step
-      document.getElementById('step-email').style.display = 'none';
-      document.getElementById('step-password').style.display = 'block';
-    } else {
-      // No Firebase account yet — show set password step
-      document.getElementById('step-email').style.display = 'none';
-      document.getElementById('step-setpassword').style.display = 'block';
-    }
-  } catch(e) {
-    err.textContent = '';
-    // If Firebase check fails, fall back to sheet
-    const u = userEntry[1];
-    if (u.hasAccount) {
-      document.getElementById('step-email').style.display = 'none';
-      document.getElementById('step-password').style.display = 'block';
-    } else {
-      document.getElementById('step-email').style.display = 'none';
-      document.getElementById('step-setpassword').style.display = 'block';
-    }
+  const hasAccount = userEntry[1].hasAccount;
+  document.getElementById('step-email').style.display = 'none';
+  if (hasAccount) {
+    document.getElementById('step-password').style.display = 'block';
+  } else {
+    document.getElementById('step-setpassword').style.display = 'block';
   }
 }
 
-function backToEmail() {
-  document.getElementById('step-email').style.display = 'block';
-  document.getElementById('step-password').style.display = 'none';
-  document.getElementById('step-setpassword').style.display = 'none';
-  document.getElementById('login-err').textContent = '';
-}
 
 // ── Sign in existing user ──────────────────────────────────────
 async function doLogin() {
