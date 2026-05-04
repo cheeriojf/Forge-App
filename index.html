@@ -458,6 +458,20 @@ firebase.auth().onAuthStateChanged(user => {
 <script>
 const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycby0bYsFFDeT8FCxMOwrr1fdhbrGxfBnJrxGI3Kb38JeBPWhG_2cO4UF_dPpuCdUsKXr/exec';
 
+// ── Read setup token immediately on page load ──────────────────
+(function() {
+  const params = new URLSearchParams(window.location.search);
+  const token = params.get('setup');
+  if (token) {
+    try {
+      const decoded = atob(decodeURIComponent(token));
+      const email = decoded.split(':')[0].toLowerCase();
+      sessionStorage.setItem('forgeSetupEmail', email);
+      window.history.replaceState({}, document.title, window.location.pathname);
+    } catch(e) {}
+  }
+})();
+
 let USERS = {};
 
 let DB = {players:[], benchmarks:[], evaluation:[], feedback:[], values:[], training:[]};
@@ -1248,27 +1262,16 @@ async function createAccount() {
 
 // ── Check for setup link on load ──────────────────────────────
 function checkSetupLink() {
-  const params = new URLSearchParams(window.location.search);
-  const token = params.get('setup');
-  if (!token) return;
-  try {
-    const decoded = atob(decodeURIComponent(token));
-    const email = decoded.split(':')[0].toLowerCase();
-    console.log('Setup link for:', email);
-    window._pendingEmail = email;
-    // Find user in USERS (data is loaded by now)
-    const userEntry = Object.entries(USERS).find(([k,v]) => v.email && v.email.toLowerCase() === email);
-    if (userEntry) window._pendingUserKey = userEntry[0];
-    // Hide all steps, show create password
-    ['step-email','step-password','step-setpassword'].forEach(id => {
-      document.getElementById(id).style.display = 'none';
-    });
-    document.getElementById('step-createpassword').style.display = 'block';
-    // Clean URL
-    window.history.replaceState({}, document.title, window.location.pathname);
-  } catch(e) {
-    console.error('Setup link error:', e);
-  }
+  const email = sessionStorage.getItem('forgeSetupEmail');
+  if (!email) return;
+  sessionStorage.removeItem('forgeSetupEmail');
+  window._pendingEmail = email;
+  const userEntry = Object.entries(USERS).find(([k,v]) => v.email && v.email.toLowerCase() === email);
+  if (userEntry) window._pendingUserKey = userEntry[0];
+  ['step-email','step-password','step-setpassword'].forEach(id => {
+    document.getElementById(id).style.display = 'none';
+  });
+  document.getElementById('step-createpassword').style.display = 'block';
 }
 
 // ── Boot ───────────────────────────────────────────────────────
