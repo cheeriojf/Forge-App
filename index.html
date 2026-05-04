@@ -238,7 +238,7 @@ firebase.auth().onAuthStateChanged(user => {
     </div>
 
     <!-- Step 4: Set password (arrived via setup link) -->
-    <div id="step-newpassword" style="display:none">
+    <div id="step-createpassword" style="display:none">
       <div style="background:rgba(29,185,84,0.1);border:1px solid rgba(29,185,84,0.3);border-radius:10px;padding:16px;margin-bottom:20px">
         <p style="font-size:14px;color:var(--text);font-weight:600;margin-bottom:6px">✓ Email confirmed!</p>
         <p style="font-size:13px;color:var(--text2);line-height:1.6">Now create a password to complete your account setup.</p>
@@ -644,7 +644,7 @@ async function createAccount() {
   const email = window._pendingEmail;
   const pass = document.getElementById('new-pass-in').value;
   const confirm = document.getElementById('confirm-pass-in').value;
-  const err = document.getElementById('login-err3');
+  const err = document.getElementById('login-err4');
   if (pass.length < 6) { err.textContent = 'Password must be at least 6 characters.'; return; }
   if (pass !== confirm) { err.textContent = 'Passwords do not match.'; return; }
   err.textContent = 'Creating account...';
@@ -652,10 +652,10 @@ async function createAccount() {
     const auth = window._firebaseAuth;
     const fns = window._firebaseFns;
     await fns.createUserWithEmailAndPassword(auth, email, pass);
-    // Mark user as having account
-    const key = window._pendingUserKey;
+    // Update sheet
+    fetch(APPS_SCRIPT_URL + '?action=setHasAccount&email=' + encodeURIComponent(email)).catch(()=>{});
     err.textContent = '';
-    loginSuccess(key);
+    loginSuccess(window._pendingUserKey || email);
   } catch(e) {
     err.textContent = e.code === 'auth/email-already-in-use'
       ? 'Account already exists. Please sign in.'
@@ -1164,7 +1164,7 @@ function showSetupLinkSent(email) {
   document.getElementById('verify-email-display').textContent = email;
   document.getElementById('verify-title').textContent = 'Check your email';
   document.getElementById('verify-subtitle').textContent = 'We sent a password setup link to';
-  document.getElementById('verify-body').textContent = 'Check your inbox for two emails — one from us with instructions, and one from Firebase with the actual password setup link. Click the Firebase link to create your password, then come back and sign in.';
+  document.getElementById('verify-body').textContent = 'Click the link in the email to set your password directly in the app. Once done you will be signed in automatically.';
   document.getElementById('resend-msg').textContent = '';
   show('verify-screen');
 }
@@ -1250,33 +1250,24 @@ async function createAccount() {
 function checkSetupLink() {
   const params = new URLSearchParams(window.location.search);
   const token = params.get('setup');
-  if (!token) return false;
+  if (!token) return;
   try {
     const decoded = atob(decodeURIComponent(token));
     const email = decoded.split(':')[0].toLowerCase();
-    console.log('Setup link detected for:', email);
+    console.log('Setup link for:', email);
     window._pendingEmail = email;
-    window._pendingSetupToken = token;
-    // Find user in USERS
+    // Find user in USERS (data is loaded by now)
     const userEntry = Object.entries(USERS).find(([k,v]) => v.email && v.email.toLowerCase() === email);
-    if (userEntry) {
-      window._pendingUserKey = userEntry[0];
-    } else {
-      // User not found in sheet yet - store email and try again after load
-      window._pendingSetupEmail = email;
-    }
-    document.getElementById('email-display').value = email;
-    // Show create password screen
-    document.getElementById('step-email').style.display = 'none';
-    document.getElementById('step-password').style.display = 'none';
-    document.getElementById('step-setpassword').style.display = 'none';
+    if (userEntry) window._pendingUserKey = userEntry[0];
+    // Hide all steps, show create password
+    ['step-email','step-password','step-setpassword'].forEach(id => {
+      document.getElementById(id).style.display = 'none';
+    });
     document.getElementById('step-createpassword').style.display = 'block';
-    // Clean URL without losing the page
+    // Clean URL
     window.history.replaceState({}, document.title, window.location.pathname);
-    return true;
   } catch(e) {
     console.error('Setup link error:', e);
-    return false;
   }
 }
 
