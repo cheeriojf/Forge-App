@@ -555,16 +555,8 @@ async function loadData() {
     DB.training   = processTraining(raw['Training Modules'] || []);
     processUsers(raw['Users'] || []);
     show('login');
-    if (window._showSetupOnLoad && window._pendingEmail) {
-      const email = window._pendingEmail;
-      const userEntry = Object.entries(USERS).find(([k,v]) => v.email && v.email.toLowerCase() === email.toLowerCase());
-      if (userEntry) {
-        window._pendingUserKey = userEntry[0];
-        document.getElementById('step-email').style.display = 'none';
-        document.getElementById('step-newpassword').style.display = 'block';
-        window._showSetupOnLoad = false;
-      }
-    }
+    // Check if user arrived via setup link in email
+    checkSetupLink();
   } catch(e) {
     console.error(e);
     document.getElementById('load-err').style.display = 'block';
@@ -1278,15 +1270,6 @@ function checkSetupLink() {
 
 // ── Boot ───────────────────────────────────────────────────────
 document.getElementById('email-in').addEventListener('keydown', e => { if(e.key==='Enter') checkEmail(); });
-
-// Check if user arrived via setup link (?setup=email)
-const urlParams = new URLSearchParams(window.location.search);
-const setupEmail = urlParams.get('setup');
-if (setupEmail) {
-  window._pendingEmail = decodeURIComponent(setupEmail);
-  // Wait for data to load then show password creation
-  window._showSetupOnLoad = true;
-}
 
 loadData();
 </script>
