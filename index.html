@@ -1250,24 +1250,33 @@ async function createAccount() {
 function checkSetupLink() {
   const params = new URLSearchParams(window.location.search);
   const token = params.get('setup');
-  if (!token) return;
+  if (!token) return false;
   try {
-    const decoded = atob(token);
+    const decoded = atob(decodeURIComponent(token));
     const email = decoded.split(':')[0].toLowerCase();
+    console.log('Setup link detected for:', email);
     window._pendingEmail = email;
+    window._pendingSetupToken = token;
     // Find user in USERS
     const userEntry = Object.entries(USERS).find(([k,v]) => v.email && v.email.toLowerCase() === email);
-    if (userEntry) window._pendingUserKey = userEntry[0];
+    if (userEntry) {
+      window._pendingUserKey = userEntry[0];
+    } else {
+      // User not found in sheet yet - store email and try again after load
+      window._pendingSetupEmail = email;
+    }
     document.getElementById('email-display').value = email;
     // Show create password screen
     document.getElementById('step-email').style.display = 'none';
     document.getElementById('step-password').style.display = 'none';
     document.getElementById('step-setpassword').style.display = 'none';
     document.getElementById('step-createpassword').style.display = 'block';
-    // Clean URL
+    // Clean URL without losing the page
     window.history.replaceState({}, document.title, window.location.pathname);
+    return true;
   } catch(e) {
     console.error('Setup link error:', e);
+    return false;
   }
 }
 
